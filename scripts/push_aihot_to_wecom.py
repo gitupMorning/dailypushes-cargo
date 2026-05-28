@@ -46,16 +46,40 @@ def shorten(text, limit=120):
     return text[: limit - 1] + "…"
 
 
-def fit_wecom_markdown(content, byte_limit=3900):
-    encoded = content.encode("utf-8")
-    if len(encoded) <= byte_limit:
-        return content
+def byte_len(text):
+    return len(text.encode("utf-8"))
 
-    suffix = "\n\n> 内容较长，已自动截断。"
-    suffix_bytes = suffix.encode("utf-8")
-    keep = byte_limit - len(suffix_bytes)
-    trimmed = encoded[:keep].decode("utf-8", errors="ignore").rstrip()
-    return trimmed + suffix
+
+def split_wecom_markdown(lines, byte_limit=3600):
+    chunks = []
+    current = []
+    current_size = 0
+
+    for line in lines:
+        addition = line + "\n"
+        size = byte_len(addition)
+
+        if current and current_size + size > byte_limit:
+            chunks.append("\n".join(current).strip())
+            current = []
+            current_size = 0
+
+        if size > byte_limit:
+            encoded = addition.encode("utf-8")
+            start = 0
+            while start < len(encoded):
+                piece = encoded[start : start + byte_limit]
+                chunks.append(piece.decode("utf-8", errors="ignore").strip())
+                start += byte_limit
+            continue
+
+        current.append(line)
+        current_size += size
+
+    if current:
+        chunks.append("\n".join(current).strip())
+
+    return [chunk for chunk in chunks if chunk]
 
 
 def source_label(source_name):
@@ -63,7 +87,7 @@ def source_label(source_name):
     return source_name.replace("（RSS）", "").replace("（网页）", "")
 
 
-def build_markdown(daily):
+def build_markdown_messages(daily):
     date = daily.get("date", "")
     sections = daily.get("sections") or []
     section_map = {section.get("label"): section for section in sections}
@@ -113,10 +137,14 @@ def build_markdown(daily):
     lines.append("")
     lines.append("> 数据来自 AI HOT。Webhook 请只保存在 GitHub Secrets。")
 
-    content = "\n".join(lines).strip()
+    chunks = split_wecom_markdown(lines)
+    if len(chunks) == 1:
+        return chunks
 
-    # 企业微信 markdown 单条消息按字节限制长度，中文需要按 UTF-8 字节截断。
-    return fit_wecom_markdown(content)
+    return [
+        f"## AI HOT 日报 · {date}（{idx}/{len(chunks)}）\n\n{chunk}"
+        for idx, chunk in enumerate(chunks, start=1)
+    ]
 
 
 def main():
@@ -127,14 +155,20 @@ def main():
 
     try:
         daily = fetch_json(AIHOT_DAILY_URL)
-        markdown = build_markdown(daily)
-        result = post_json(
-            webhook,
-            {
-                "msgtype": "markdown",
-                "markdown": {"content": markdown},
-            },
-        )
+        messages = build_markdown_messages(daily)
+        results = []
+        for markdown in messages:
+            result = post_json(
+                webhook,
+                {
+                    "msgtype": "markdown",
+                    "markdown": {"content": markdown},
+                },
+            )
+            results.append(result)
+            if result.get("errcode") != 0:
+                print(json.dumps(result, ensure_ascii=False))
+                return 1
     except urllib.error.HTTPError as exc:
         print(exc.read().decode("utf-8", errors="replace"), file=sys.stderr)
         return 1
@@ -142,9 +176,7 @@ def main():
         print(f"Push failed: {exc}", file=sys.stderr)
         return 1
 
-    print(json.dumps(result, ensure_ascii=False))
-    if result.get("errcode") != 0:
-        return 1
+    print(json.dumps(results, ensure_ascii=False))
     return 0
 
 
