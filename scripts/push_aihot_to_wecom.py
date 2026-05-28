@@ -13,11 +13,11 @@ USER_AGENT = (
 )
 
 SECTION_ORDER = [
-    "妯″瀷鍙戝竷/鏇存柊",
-    "浜у搧鍙戝竷/鏇存柊",
-    "琛屼笟鍔ㄦ€?,
-    "璁烘枃鐮旂┒",
-    "鎶€宸т笌瑙傜偣",
+    "模型发布/更新",
+    "产品发布/更新",
+    "行业动态",
+    "论文研究",
+    "技巧与观点",
 ]
 
 
@@ -43,7 +43,7 @@ def shorten(text, limit=120):
     text = " ".join((text or "").split())
     if len(text) <= limit:
         return text
-    return text[: limit - 1] + "鈥?
+    return text[: limit - 1] + "…"
 
 
 def fit_wecom_markdown(content, byte_limit=3900):
@@ -51,7 +51,7 @@ def fit_wecom_markdown(content, byte_limit=3900):
     if len(encoded) <= byte_limit:
         return content
 
-    suffix = "\n\n> 鍐呭杈冮暱锛屽凡鑷姩鎴柇銆?
+    suffix = "\n\n> 内容较长，已自动截断。"
     suffix_bytes = suffix.encode("utf-8")
     keep = byte_limit - len(suffix_bytes)
     trimmed = encoded[:keep].decode("utf-8", errors="ignore").rstrip()
@@ -59,8 +59,8 @@ def fit_wecom_markdown(content, byte_limit=3900):
 
 
 def source_label(source_name):
-    source_name = source_name or "鏉ユ簮"
-    return source_name.replace("锛圧SS锛?, "").replace("锛堢綉椤碉級", "")
+    source_name = source_name or "来源"
+    return source_name.replace("（RSS）", "").replace("（网页）", "")
 
 
 def build_markdown(daily):
@@ -69,7 +69,7 @@ def build_markdown(daily):
     section_map = {section.get("label"): section for section in sections}
 
     lines = [
-        f"## AI HOT 鏃ユ姤 路 {date}",
+        f"## AI HOT 日报 · {date}",
         "",
     ]
 
@@ -84,15 +84,15 @@ def build_markdown(daily):
 
         lines.append(f"### {label}")
         for item in items:
-            title = item.get("title") or "鏈懡鍚嶆潯鐩?
+            title = item.get("title") or "未命名条目"
             url = item.get("sourceUrl") or ""
             source = source_label(item.get("sourceName"))
             summary = shorten(item.get("summary"), 110)
 
             if url:
-                lines.append(f"{number}. [{title}]({url}) 鈥?{source}")
+                lines.append(f"{number}. [{title}]({url}) — {source}")
             else:
-                lines.append(f"{number}. {title} 鈥?{source}")
+                lines.append(f"{number}. {title} — {source}")
             if summary:
                 lines.append(f"   {summary}")
             number += 1
@@ -100,22 +100,23 @@ def build_markdown(daily):
 
     flashes = daily.get("flashes") or []
     if flashes:
-        lines.append("### 蹇")
+        lines.append("### 快讯")
         for flash in flashes[:10]:
-            title = flash.get("title") or "鏈懡鍚嶅揩璁?
+            title = flash.get("title") or "未命名快讯"
             url = flash.get("sourceUrl") or ""
             source = source_label(flash.get("sourceName"))
             if url:
-                lines.append(f"- [{title}]({url}) 鈥?{source}")
+                lines.append(f"- [{title}]({url}) — {source}")
             else:
-                lines.append(f"- {title} 鈥?{source}")
+                lines.append(f"- {title} — {source}")
 
     lines.append("")
-    lines.append("> 鏁版嵁鏉ヨ嚜 AI HOT銆俉ebhook 璇峰彧淇濆瓨鍦?GitHub Secrets銆?)
+    lines.append("> 数据来自 AI HOT。Webhook 请只保存在 GitHub Secrets。")
 
     content = "\n".join(lines).strip()
 
-    # 浼佷笟寰俊 markdown 鍗曟潯娑堟伅鎸夊瓧鑺傞檺鍒堕暱搴︼紝涓枃闇€瑕佹寜 UTF-8 瀛楄妭鎴柇銆?    return fit_wecom_markdown(content)
+    # 企业微信 markdown 单条消息按字节限制长度，中文需要按 UTF-8 字节截断。
+    return fit_wecom_markdown(content)
 
 
 def main():
