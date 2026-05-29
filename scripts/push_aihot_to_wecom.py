@@ -1,9 +1,9 @@
-import json
-import os
-import sys
-import time
-import urllib.error
-import urllib.request
+  import json
+  import os
+  import sys
+  import time
+  import urllib.error
+  import urllib.request
 
 
   AIHOT_DAILY_URL = "https://aihot.virxact.com/api/public/daily"
@@ -125,6 +125,51 @@ import urllib.request
 
       flashes = daily.get("flashes") or []
       if flashes:
+          lines.append("### 快讯")
+          for flash in flashes[:10]:
+              title = flash.get("title") or "未命名快讯"
+              url = flash.get("sourceUrl") or ""
+              source = source_label(flash.get("sourceName"))
+              if url:
+                  lines.append(f"- [{title}]({url}) — {source}")
+              else:
+                  lines.append(f"- {title} — {source}")
+
+      lines.append("")
+      lines.append("> 数据来自 AI HOT。Webhook 请只保存在 GitHub Secrets。")
+
+      chunks = split_wecom_markdown(lines)
+      if len(chunks) == 1:
+          return chunks
+
+      return [
+          f"## AI HOT 日报 · {date}（{idx}/{len(chunks)}）\n\n{chunk}"
+          for idx, chunk in enumerate(chunks, start=1)
+      ]
+
+
+  def main():
+      webhook = os.environ.get("WECOM_WEBHOOK", "").strip()
+      if not webhook:
+          print("Missing WECOM_WEBHOOK environment variable.", file=sys.stderr)
+          return 2
+
+      try:
+          daily = fetch_json(AIHOT_DAILY_URL)
+          messages = build_markdown_messages(daily)
+          results = []
+          for i, markdown in enumerate(messages):
+              result = post_json(
+                  webhook,
+                  {
+                      "msgtype": "markdown",
+                      "markdown": {"content": markdown},
+                  },
+              )
+              results.append(result)
+              print(f"[chunk {i+1}/{len(messages)}] errcode={result.get('errcode')} errmsg={result.get('errmsg')}")
+              if result.get("errcode") != 0:
+                  print(json.dumps(result, ensure_ascii=False))
           lines.append("### 快讯")
           for flash in flashes[:10]:
               title = flash.get("title") or "未命名快讯"
