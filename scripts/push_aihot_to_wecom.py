@@ -1,9 +1,9 @@
 import json
-  import os
-  import sys
-  import time
-  import urllib.error
-  import urllib.request
+import os
+import sys
+import time
+import urllib.error
+import urllib.request
 
 
   AIHOT_DAILY_URL = "https://aihot.virxact.com/api/public/daily"
